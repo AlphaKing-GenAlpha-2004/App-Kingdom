@@ -1,5 +1,5 @@
 {
-  "name": "Copy of GridShift Puzzler",
+  "name": "GridShift Puzzler",
   "description": "An advanced N x M sliding puzzle with AI solvers, dynamic themes, and competitive leaderboards.",
   "requestFramePermissions": [
     "camera"

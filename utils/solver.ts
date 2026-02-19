@@ -1,5 +1,6 @@
 
 import { TileValue, GridConfig } from '../types';
+import { getPossibleMoves, performMove, Move } from './puzzleUtils';
 
 interface Node {
   board: TileValue[];
@@ -7,7 +8,7 @@ interface Node {
   h: number;
   f: number;
   parent: Node | null;
-  moveIndex: number;
+  move: Move | null;
 }
 
 const manhattanHeuristic = (board: TileValue[], config: GridConfig): number => {
@@ -26,35 +27,18 @@ const manhattanHeuristic = (board: TileValue[], config: GridConfig): number => {
   return distance;
 };
 
-// Simplified Linear Conflict for performance
-const linearConflictHeuristic = (board: TileValue[], config: GridConfig): number => {
-  const { rows, cols } = config;
-  let conflict = 0;
-
-  // Row conflicts
-  for (let r = 0; r < rows; r++) {
-    for (let c1 = 0; c1 < cols; c1++) {
-      for (let c2 = c1 + 1; c2 < cols; c2++) {
-        const v1 = board[r * cols + c1];
-        const v2 = board[r * cols + c2];
-        if (v1 !== 0 && v2 !== 0) {
-          const t1 = v1 - 1;
-          const t2 = v2 - 1;
-          if (Math.floor(t1 / cols) === r && Math.floor(t2 / cols) === r && t1 > t2) {
-            conflict += 2;
-          }
-        }
-      }
-    }
+export const solveAStar = async (
+  board: TileValue[], 
+  config: GridConfig, 
+  maxNodes = 10000
+): Promise<Move[] | null> => {
+  // For larger grids, A* might be too slow in browser
+  if (board.length > 16) {
+    return solveIDAStar(board, config);
   }
-  return conflict;
-};
 
-export const solveAStar = async (board: TileValue[], config: GridConfig, maxNodes = 5000): Promise<number[] | null> => {
-  if (board.length > 25) return null; // Safety cap for browser A*
-
-  const startH = manhattanHeuristic(board, config) + linearConflictHeuristic(board, config);
-  const startNode: Node = { board, g: 0, h: startH, f: startH, parent: null, moveIndex: -1 };
+  const startH = manhattanHeuristic(board, config);
+  const startNode: Node = { board, g: 0, h: startH, f: startH, parent: null, move: null };
   
   const openSet: Node[] = [startNode];
   const closedSet = new Set<string>();
@@ -66,10 +50,10 @@ export const solveAStar = async (board: TileValue[], config: GridConfig, maxNode
     nodesExpanded++;
 
     if (current.h === 0) {
-      const path: number[] = [];
+      const path: Move[] = [];
       let temp: Node | null = current;
-      while (temp && temp.moveIndex !== -1) {
-        path.unshift(temp.moveIndex);
+      while (temp && temp.move) {
+        path.unshift(temp.move);
         temp = temp.parent;
       }
       return path;
@@ -79,34 +63,75 @@ export const solveAStar = async (board: TileValue[], config: GridConfig, maxNode
     if (closedSet.has(boardStr)) continue;
     closedSet.add(boardStr);
 
-    const emptyIdx = current.board.indexOf(0);
-    const r = Math.floor(emptyIdx / config.cols);
-    const c = emptyIdx % config.cols;
+    const possibleMoves = getPossibleMoves(current.board, config);
 
-    const neighbors = [
-      { dr: -1, dc: 0 }, { dr: 1, dc: 0 }, { dr: 0, dc: -1 }, { dr: 0, dc: 1 }
-    ];
+    for (const move of possibleMoves) {
+      const newBoard = performMove(current.board, config, move);
+      const boardStr = newBoard.join(',');
+      if (closedSet.has(boardStr)) continue;
 
-    for (const { dr, dc } of neighbors) {
-      const nr = r + dr;
-      const nc = c + dc;
-      if (nr >= 0 && nr < config.rows && nc >= 0 && nc < config.cols) {
-        const targetIdx = nr * config.cols + nc;
-        const newBoard = [...current.board];
-        [newBoard[emptyIdx], newBoard[targetIdx]] = [newBoard[targetIdx], newBoard[emptyIdx]];
-        
-        const h = manhattanHeuristic(newBoard, config) + linearConflictHeuristic(newBoard, config);
-        openSet.push({
-          board: newBoard,
-          g: current.g + 1,
-          h,
-          f: current.g + 1 + h,
-          parent: current,
-          moveIndex: targetIdx
-        });
-      }
+      const h = manhattanHeuristic(newBoard, config);
+      openSet.push({
+        board: newBoard,
+        g: current.g + 1,
+        h,
+        f: current.g + 1 + h,
+        parent: current,
+        move
+      });
     }
   }
 
   return null;
 };
+
+// IDA* implementation for larger search spaces
+async function solveIDAStar(board: TileValue[], config: GridConfig): Promise<Move[] | null> {
+  let threshold = manhattanHeuristic(board, config);
+  const path: Move[] = [];
+  
+  while (threshold < 100) { // Safety cap on threshold
+    const result = await search(board, 0, threshold, path, config, new Set());
+    if (typeof result === 'object') return result;
+    if (result === Infinity) return null;
+    threshold = result;
+    // Yield to UI thread
+    await new Promise(r => setTimeout(r, 0));
+  }
+  return null;
+}
+
+async function search(
+  board: TileValue[], 
+  g: number, 
+  threshold: number, 
+  path: Move[], 
+  config: GridConfig, 
+  visited: Set<string>
+): Promise<number | Move[]> {
+  const h = manhattanHeuristic(board, config);
+  const f = g + h;
+  if (f > threshold) return f;
+  if (h === 0) return [...path];
+
+  const boardStr = board.join(',');
+  visited.add(boardStr);
+
+  let min = Infinity;
+  const possibleMoves = getPossibleMoves(board, config);
+
+  for (const move of possibleMoves) {
+    const nextBoard = performMove(board, config, move);
+    const nextStr = nextBoard.join(',');
+    if (visited.has(nextStr)) continue;
+
+    path.push(move);
+    const result = await search(nextBoard, g + 1, threshold, path, config, visited);
+    if (typeof result === 'object') return result;
+    if (result < min) min = result;
+    path.pop();
+  }
+
+  visited.delete(boardStr);
+  return min;
+}

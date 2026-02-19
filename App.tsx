@@ -7,7 +7,7 @@ import {
 import { THEMES, FONTS } from './constants';
 import { 
   shuffleBoard, isSolved, getPossibleMoves, 
-  calculateScore, generateGoal 
+  calculateScore, generateGoal, performMove 
 } from './utils/puzzleUtils';
 import { solveAStar } from './utils/solver';
 import SettingsPanel from './components/SettingsPanel';
@@ -52,6 +52,9 @@ const App: React.FC = () => {
   });
 
   const [time, setTime] = useState(0);
+  const [hoveredRow, setHoveredRow] = useState<number | null>(null);
+  const [hoveredCol, setHoveredCol] = useState<number | null>(null);
+  const [isAnimating, setIsAnimating] = useState(false);
 
   // Persistence
   useEffect(() => {
@@ -113,14 +116,18 @@ const App: React.FC = () => {
     });
   };
 
-  const moveTile = (index: number) => {
-    if (gameState.isSolved || gameState.isAIPlaying || gameState.isPaused) return;
+  const moveTile = async (index: number) => {
+    if (gameState.isSolved || gameState.isAIPlaying || gameState.isPaused || isAnimating) return;
 
-    const possible = getPossibleMoves(gameState.board, gameState.config);
-    if (possible.includes(index)) {
-      const newBoard = [...gameState.board];
-      const emptyIdx = newBoard.indexOf(0);
-      [newBoard[index], newBoard[emptyIdx]] = [newBoard[emptyIdx], newBoard[index]];
+    const possibleMoves = getPossibleMoves(gameState.board, gameState.config);
+    const move = possibleMoves.find(m => m.index === index);
+
+    if (move) {
+      setIsAnimating(true);
+      const newBoard = performMove(gameState.board, gameState.config, move);
+      
+      // Artificial delay for animation smoothness
+      await new Promise(r => setTimeout(r, 200));
 
       const solved = isSolved(newBoard);
       setGameState(prev => ({
@@ -134,6 +141,7 @@ const App: React.FC = () => {
       if (solved && gameState.mode !== GameMode.AI_SOLVE) {
         submitScore(gameState.moves + 1);
       }
+      setIsAnimating(false);
     }
   };
 
@@ -158,17 +166,16 @@ const App: React.FC = () => {
     if (gameState.isSolved || gameState.isAIPlaying || gameState.isPaused) return;
     const path = await solveAStar(gameState.board, gameState.config);
     if (!path) {
-      alert("Grid too complex for A*. Try a smaller grid for AI demos!");
+      alert("Grid too complex for AI. Try a smaller grid!");
       return;
     }
 
     setGameState(prev => ({ ...prev, isAIPlaying: true, isPaused: false }));
     
     let currentBoard = [...gameState.board];
-    for (const stepIndex of path) {
-      await new Promise(r => setTimeout(r, 200));
-      const emptyIdx = currentBoard.indexOf(0);
-      [currentBoard[stepIndex], currentBoard[emptyIdx]] = [currentBoard[emptyIdx], currentBoard[stepIndex]];
+    for (const move of path) {
+      await new Promise(r => setTimeout(r, 300));
+      currentBoard = performMove(currentBoard, gameState.config, move);
       setGameState(prev => ({
         ...prev,
         board: [...currentBoard],
@@ -181,6 +188,13 @@ const App: React.FC = () => {
   const currentScore = useMemo(() => {
     return calculateScore(gameState.config.rows, gameState.config.cols, gameState.moves, time);
   }, [gameState.config, gameState.moves, time]);
+
+  // Create a stable list of tile IDs to map over. 
+  // This ensures DOM elements are reused for animations.
+  const tileIds = useMemo(() => {
+    const size = gameState.config.rows * gameState.config.cols;
+    return Array.from({ length: size - 1 }, (_, i) => i + 1);
+  }, [gameState.config.rows, gameState.config.cols]);
 
   return (
     <div 
@@ -246,23 +260,41 @@ const App: React.FC = () => {
       <div className="flex-1 flex flex-col items-center justify-center z-10">
         <div className="bg-black/20 p-2 rounded-[2rem] shadow-2xl backdrop-blur-sm border border-white/10 w-full max-w-2xl aspect-square flex items-center justify-center relative">
           <div 
-            className={`grid gap-2 w-full h-full p-2 transition-opacity duration-300 ${gameState.isPaused ? 'opacity-20 blur-sm grayscale' : 'opacity-100'}`}
-            style={{ 
-              gridTemplateColumns: `repeat(${gameState.config.cols}, 1fr)`,
-              gridTemplateRows: `repeat(${gameState.config.rows}, 1fr)`
-            }}
+            className={`w-full h-full p-2 transition-opacity duration-300 relative ${gameState.isPaused ? 'opacity-20 blur-sm grayscale' : 'opacity-100'}`}
           >
-            {gameState.board.map((tile, idx) => (
-              <Tile 
-                key={`${idx}-${tile}`}
-                value={tile}
-                idx={idx}
-                config={gameState.config}
-                settings={settings}
-                onClick={() => moveTile(idx)}
-                isCorrect={tile !== 0 && tile === idx + 1}
-              />
-            ))}
+            {tileIds.map((val) => {
+              const currentIdx = gameState.board.indexOf(val);
+              const r = Math.floor(currentIdx / gameState.config.cols);
+              const c = currentIdx % gameState.config.cols;
+              
+              const emptyIdx = gameState.board.indexOf(0);
+              const rEmpty = Math.floor(emptyIdx / gameState.config.cols);
+              const cEmpty = emptyIdx % gameState.config.cols;
+
+              const isHighlighted = r === hoveredRow || c === hoveredCol;
+
+              return (
+                <Tile 
+                  key={val}
+                  value={val}
+                  row={r}
+                  col={c}
+                  config={gameState.config}
+                  settings={settings}
+                  onClick={() => moveTile(currentIdx)}
+                  isCorrect={val === currentIdx + 1}
+                  isHighlighted={isHighlighted}
+                  onMouseEnter={() => {
+                    setHoveredRow(r);
+                    setHoveredCol(c);
+                  }}
+                  onMouseLeave={() => {
+                    setHoveredRow(null);
+                    setHoveredCol(null);
+                  }}
+                />
+              );
+            })}
           </div>
 
           {gameState.isPaused && (

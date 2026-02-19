@@ -48,7 +48,7 @@ export interface GameState {
   mode: GameMode;
   timeLimit?: number;
   moveLimit?: number;
-  aiPath: number[] | null;
+  aiPath: any[] | null;
   isAIPlaying: boolean;
 }
 
