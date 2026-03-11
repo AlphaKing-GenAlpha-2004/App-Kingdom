@@ -15,15 +15,9 @@ import Tile from './components/Tile';
 
 const App: React.FC = () => {
   const [gameState, setGameState] = useState<GameState>(() => {
-    const saved = localStorage.getItem('gridshift-game');
-    if (saved) {
-        const parsed = JSON.parse(saved);
-        // Ensure isPaused is false on load to avoid confusion
-        return { ...parsed, isPaused: false };
-    }
-    return {
+    const defaultState: GameState = {
       board: shuffleBoard({ rows: 3, cols: 3 }),
-      config: { rows: 3, cols: 3 },
+      config: { rows: 3, cols: 3, timeLimit: 60, moveLimit: 50 },
       moves: 0,
       startTime: null,
       endTime: null,
@@ -33,6 +27,26 @@ const App: React.FC = () => {
       aiPath: null,
       isAIPlaying: false
     };
+
+    const saved = localStorage.getItem('gridshift-game');
+    if (saved) {
+        try {
+            const parsed = JSON.parse(saved);
+            // Validate board integrity
+            if (!parsed.board || !Array.isArray(parsed.board) || !parsed.board.includes(0)) {
+                return defaultState;
+            }
+            // If no moves have been made, startTime should be null (fix for old persisted states)
+            if (parsed.moves === 0) {
+                parsed.startTime = null;
+            }
+            // Ensure isPaused is false on load to avoid confusion
+            return { ...parsed, isPaused: false };
+        } catch (e) {
+            return defaultState;
+        }
+    }
+    return defaultState;
   });
 
   const [settings, setSettings] = useState<AppSettings>(() => {
@@ -51,8 +65,22 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : [];
   });
 
-  const [time, setTime] = useState(0);
-  const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
+  const [time, setTime] = useState(() => {
+    if (gameState.startTime && !gameState.endTime) {
+      return Math.floor((Date.now() - gameState.startTime) / 1000);
+    }
+    return 0;
+  });
+  const [timeRemaining, setTimeRemaining] = useState<number | null>(() => {
+    if (gameState.mode === GameMode.TIMED && gameState.timeLimit) {
+      if (gameState.startTime && !gameState.endTime) {
+        const elapsed = Math.floor((Date.now() - gameState.startTime) / 1000);
+        return Math.max(0, gameState.timeLimit - elapsed);
+      }
+      return gameState.timeLimit;
+    }
+    return null;
+  });
   const [movesRemaining, setMovesRemaining] = useState<number | null>(null);
   const [failureReason, setFailureReason] = useState<'TIME' | 'MOVES' | null>(null);
   const [aiStats, setAiStats] = useState<{ nodesExpanded: number; timeTaken: number; pathLength: number } | null>(null);
@@ -101,16 +129,16 @@ const App: React.FC = () => {
     }
 
     const size = gameState.config.rows * gameState.config.cols;
-    let timeLimit: number | undefined;
-    let moveLimit: number | undefined;
+    let timeLimit: number | undefined = gameState.config.timeLimit;
+    let moveLimit: number | undefined = gameState.config.moveLimit;
 
-    if (gameState.mode === GameMode.TIMED) {
+    if (gameState.mode === GameMode.TIMED && !timeLimit) {
       if (size <= 400) timeLimit = 60;
       else if (size <= 2500) timeLimit = 180;
       else timeLimit = 300;
     }
 
-    if (gameState.mode === GameMode.LIMITED_MOVES) {
+    if (gameState.mode === GameMode.LIMITED_MOVES && !moveLimit) {
       moveLimit = Math.floor(size * 4.0);
     }
 
@@ -118,7 +146,7 @@ const App: React.FC = () => {
       ...prev,
       board: shuffleBoard(prev.config),
       moves: 0,
-      startTime: Date.now(),
+      startTime: null,
       endTime: null,
       isSolved: false,
       isPaused: false,
@@ -155,42 +183,52 @@ const App: React.FC = () => {
   };
 
   const moveTile = async (index: number) => {
-    if (gameState.isSolved || gameState.isAIPlaying || gameState.isPaused || isAnimating || failureReason || gameState.mode === GameMode.AI_SOLVE) return;
+    if (gameState.isSolved || gameState.isAIPlaying || gameState.isPaused || isAnimating || failureReason) return;
 
     const possibleMoves = getPossibleMoves(gameState.board, gameState.config);
     const move = possibleMoves.find(m => m.index === index);
 
     if (move) {
       setIsAnimating(true);
-      const newBoard = performMove(gameState.board, gameState.config, move);
-      
-      // Artificial delay for animation smoothness
-      await new Promise(r => setTimeout(r, 200));
+      try {
+        const newBoard = performMove(gameState.board, gameState.config, move);
+        
+        // Artificial delay for animation smoothness
+        await new Promise(r => setTimeout(r, 200));
 
-      const solved = isSolved(newBoard);
-      const nextMoves = gameState.moves + 1;
+        const solved = isSolved(newBoard);
+        const nextMoves = gameState.moves + 1;
 
-      if (gameState.mode === GameMode.LIMITED_MOVES && movesRemaining !== null) {
-        const remaining = movesRemaining - 1;
-        setMovesRemaining(remaining);
-        if (remaining === 0 && !solved) {
-          setFailureReason('MOVES');
+        if (gameState.mode === GameMode.LIMITED_MOVES && movesRemaining !== null) {
+          const remaining = movesRemaining - 1;
+          setMovesRemaining(remaining);
+          if (remaining === 0 && !solved) {
+            setFailureReason('MOVES');
+          }
         }
-      }
 
-      setGameState(prev => ({
-        ...prev,
-        board: newBoard,
-        moves: nextMoves,
-        isSolved: solved,
-        endTime: solved ? Date.now() : null
-      }));
+        setGameState(prev => ({
+          ...prev,
+          board: newBoard,
+          moves: nextMoves,
+          isSolved: solved,
+          endTime: solved ? Date.now() : null,
+          startTime: prev.startTime || Date.now()
+        }));
 
-      if (solved && gameState.mode !== GameMode.AI_SOLVE) {
-        submitScore(nextMoves);
+        if (solved) {
+          submitScore(nextMoves);
+        }
+      } finally {
+        setIsAnimating(false);
       }
-      setIsAnimating(false);
     }
+  };
+
+  const handleReset = () => {
+    localStorage.removeItem('gridshift-game');
+    localStorage.removeItem('gridshift-settings');
+    window.location.reload();
   };
 
   const submitScore = (finalMoves: number) => {
@@ -214,7 +252,7 @@ const App: React.FC = () => {
     if (gameState.isSolved || gameState.isAIPlaying || gameState.isPaused || failureReason) return;
     
     const solveStart = Date.now();
-    const path = await solveAStar(gameState.board, gameState.config);
+    const { path, nodesExpanded } = await solveAStar(gameState.board, gameState.config);
     const solveEnd = Date.now();
 
     if (!path) {
@@ -223,12 +261,17 @@ const App: React.FC = () => {
     }
 
     setAiStats({
-      nodesExpanded: path.length * 15, // Estimation since solver doesn't return expanded count
+      nodesExpanded,
       timeTaken: (solveEnd - solveStart) / 1000,
       pathLength: path.length
     });
 
-    setGameState(prev => ({ ...prev, isAIPlaying: true, isPaused: false }));
+    setGameState(prev => ({ 
+      ...prev, 
+      isAIPlaying: true, 
+      isPaused: false,
+      startTime: prev.startTime || Date.now()
+    }));
     
     let currentBoard = [...gameState.board];
     for (const move of path) {
@@ -277,19 +320,19 @@ const App: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-2 gap-4">
-          <div className="bg-black/40 backdrop-blur-xl p-5 rounded-3xl border border-white/5">
+          <div className={`bg-black/40 backdrop-blur-xl p-5 rounded-3xl border transition-all ${gameState.mode === GameMode.LIMITED_MOVES && movesRemaining !== null && movesRemaining <= 5 ? 'border-red-500/50 animate-pulse' : 'border-white/5'}`}>
             <p className="text-[10px] uppercase font-bold text-white/40 mb-1">
               {gameState.mode === GameMode.LIMITED_MOVES ? 'Moves Left' : 'Moves'}
             </p>
-            <p className="text-2xl font-black">
+            <p className={`text-2xl font-black ${gameState.mode === GameMode.LIMITED_MOVES && movesRemaining !== null && movesRemaining <= 5 ? 'text-red-400' : ''}`}>
               {gameState.mode === GameMode.LIMITED_MOVES ? movesRemaining : gameState.moves}
             </p>
           </div>
-          <div className="bg-black/40 backdrop-blur-xl p-5 rounded-3xl border border-white/5">
+          <div className={`bg-black/40 backdrop-blur-xl p-5 rounded-3xl border transition-all ${gameState.mode === GameMode.TIMED && timeRemaining !== null && timeRemaining <= 10 ? 'border-red-500/50 animate-pulse' : 'border-white/5'}`}>
             <p className="text-[10px] uppercase font-bold text-white/40 mb-1">
               {gameState.mode === GameMode.TIMED ? 'Time Left' : 'Time'}
             </p>
-            <p className="text-2xl font-black font-mono">
+            <p className={`text-2xl font-black font-mono ${gameState.mode === GameMode.TIMED && timeRemaining !== null && timeRemaining <= 10 ? 'text-red-400' : ''}`}>
               {gameState.mode === GameMode.TIMED 
                 ? `${Math.floor((timeRemaining || 0) / 60)}:${((timeRemaining || 0) % 60).toString().padStart(2, '0')}`
                 : `${Math.floor(time / 60)}:${(time % 60).toString().padStart(2, '0')}`
@@ -298,6 +341,14 @@ const App: React.FC = () => {
           </div>
         </div>
 
+        {!gameState.startTime && !gameState.isSolved && !failureReason && (
+          <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-2xl text-center">
+            <p className="text-[10px] font-bold text-blue-400 uppercase tracking-widest animate-pulse">
+              Waiting for first move...
+            </p>
+          </div>
+        )}
+
         {aiStats && (
           <div className="bg-purple-900/40 backdrop-blur-xl p-5 rounded-3xl border border-purple-500/20 space-y-2">
             <p className="text-[10px] uppercase font-bold text-purple-300/60 mb-2 flex items-center gap-2">
@@ -305,15 +356,15 @@ const App: React.FC = () => {
             </p>
             <div className="grid grid-cols-3 gap-2 text-center">
               <div>
-                <p className="text-[9px] text-purple-300/40 uppercase">Nodes</p>
+                <p className="text-[9px] text-purple-300/40 uppercase">Explored</p>
                 <p className="text-sm font-bold">{aiStats.nodesExpanded}</p>
               </div>
               <div>
-                <p className="text-[9px] text-purple-300/40 uppercase">Time</p>
-                <p className="text-sm font-bold">{aiStats.timeTaken.toFixed(2)}s</p>
+                <p className="text-[9px] text-purple-300/40 uppercase">Calc Time</p>
+                <p className="text-sm font-bold">{aiStats.timeTaken.toFixed(3)}s</p>
               </div>
               <div>
-                <p className="text-[9px] text-purple-300/40 uppercase">Length</p>
+                <p className="text-[9px] text-purple-300/40 uppercase">Path</p>
                 <p className="text-sm font-bold">{aiStats.pathLength}</p>
               </div>
             </div>
@@ -352,6 +403,13 @@ const App: React.FC = () => {
         >
           <i className="fas fa-robot"></i>
           {gameState.isAIPlaying ? 'Computing Path...' : 'AI Auto-Solve'}
+        </button>
+
+        <button 
+          onClick={handleReset}
+          className="w-full bg-red-900/20 hover:bg-red-900/40 text-red-400 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all border border-red-900/30"
+        >
+          Hard Reset App
         </button>
       </div>
 

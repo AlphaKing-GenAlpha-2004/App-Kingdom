@@ -77,7 +77,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
       <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-3xl backdrop-blur-xl">
         <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-4">Game Mode</h3>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-2 mb-4">
           {Object.values(GameMode).map((m) => (
             <button
               key={m}
@@ -88,6 +88,30 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
             </button>
           ))}
         </div>
+
+        {mode === GameMode.TIMED && (
+          <div className="mt-4 animate-in fade-in slide-in-from-top-2 duration-300">
+            <label className="text-[10px] text-slate-500 block mb-1">Time Limit (seconds)</label>
+            <input 
+              type="number" min="10" max="3600"
+              value={config.timeLimit || 60}
+              onChange={(e) => onConfigChange({ timeLimit: parseInt(e.target.value) || 0 })}
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 ring-blue-500"
+            />
+          </div>
+        )}
+
+        {mode === GameMode.LIMITED_MOVES && (
+          <div className="mt-4 animate-in fade-in slide-in-from-top-2 duration-300">
+            <label className="text-[10px] text-slate-500 block mb-1">Move Limit</label>
+            <input 
+              type="number" min="1" max="10000"
+              value={config.moveLimit || 100}
+              onChange={(e) => onConfigChange({ moveLimit: parseInt(e.target.value) || 0 })}
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 ring-blue-500"
+            />
+          </div>
+        )}
       </div>
 
       <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-3xl backdrop-blur-xl">

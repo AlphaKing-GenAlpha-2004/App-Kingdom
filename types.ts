@@ -4,8 +4,7 @@ export type TileValue = number;
 export enum GameMode {
   NORMAL = 'NORMAL',
   TIMED = 'TIMED',
-  LIMITED_MOVES = 'LIMITED_MOVES',
-  AI_SOLVE = 'AI_SOLVE'
+  LIMITED_MOVES = 'LIMITED_MOVES'
 }
 
 export enum ThemeType {
@@ -25,6 +24,8 @@ export interface Theme {
 export interface GridConfig {
   rows: number;
   cols: number;
+  timeLimit?: number;
+  moveLimit?: number;
 }
 
 export interface LeaderboardEntry {
