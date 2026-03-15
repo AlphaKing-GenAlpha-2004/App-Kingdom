@@ -35,6 +35,24 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
   return (
     <div className="space-y-6 text-slate-300">
       <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-3xl backdrop-blur-xl">
+        <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-4">Player Profile</h3>
+        <div className="space-y-2">
+          <label className="text-[10px] text-slate-500 block mb-1">Player Name</label>
+          <div className="relative">
+            <i className="fas fa-user absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
+            <input 
+              type="text" 
+              maxLength={15}
+              value={settings.username}
+              onChange={(e) => onSettingsChange({ username: e.target.value || 'Player1' })}
+              placeholder="Enter your name..."
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-9 pr-3 py-2 text-sm focus:ring-2 ring-blue-500 outline-none transition-colors"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-3xl backdrop-blur-xl">
         <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-4">Grid Setup</h3>
         <div className="grid grid-cols-2 gap-3 mb-2">
           <div>

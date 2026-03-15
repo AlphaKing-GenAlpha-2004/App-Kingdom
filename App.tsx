@@ -553,10 +553,21 @@ const App: React.FC = () => {
               </section>
 
               <section className="space-y-4">
-                <h3 className="text-lg font-bold text-blue-400 uppercase tracking-widest text-sm">SECTION 7: Purpose</h3>
-                <p className="text-white/70 leading-relaxed italic text-sm">
-                  This project serves as an educational tool for students studying Artificial Intelligence and algorithm design, helping them understand search algorithms visually and compare their efficiency.
-                </p>
+                <h3 className="text-lg font-bold text-blue-400 uppercase tracking-widest text-sm">SECTION 8: Primary Technologies Used</h3>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="bg-white/5 border border-white/10 p-4 rounded-2xl text-center">
+                    <i className="fab fa-react text-2xl text-blue-400 mb-2"></i>
+                    <p className="text-white font-bold text-[10px] uppercase">React</p>
+                  </div>
+                  <div className="bg-white/5 border border-white/10 p-4 rounded-2xl text-center">
+                    <i className="fas fa-wind text-2xl text-emerald-400 mb-2"></i>
+                    <p className="text-white font-bold text-[10px] uppercase">Tailwind CSS</p>
+                  </div>
+                  <div className="bg-white/5 border border-white/10 p-4 rounded-2xl text-center">
+                    <i className="fas fa-code text-2xl text-blue-500 mb-2"></i>
+                    <p className="text-white font-bold text-[10px] uppercase">TypeScript</p>
+                  </div>
+                </div>
               </section>
             </div>
           </div>
