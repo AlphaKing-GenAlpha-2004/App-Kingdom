@@ -38,8 +38,22 @@ export interface LeaderboardEntry {
   date: number;
 }
 
+export enum SearchAlgorithm {
+  BFS = 'Breadth-First Search (BFS)',
+  DFS = 'Depth-First Search (DFS)',
+  IDDFS = 'Iterative Deepening DFS (IDDFS)',
+  UCS = 'Uniform Cost Search (UCS)',
+  ASTAR = 'A* Search'
+}
+
+export enum HeuristicType {
+  MANHATTAN = 'MANHATTAN',
+  MISPLACED = 'MISPLACED'
+}
+
 export interface GameState {
   board: TileValue[];
+  initialBoard: TileValue[];
   config: GridConfig;
   moves: number;
   startTime: number | null;
